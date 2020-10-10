@@ -245,6 +245,33 @@ thread_unblock (struct thread *t)
   intr_set_level (old_level);
 }
 
+void
+insert_sleep_thread(struct thread * present_thread)
+{
+  list_push_back(&sleep_list, &present_thread->elem);
+}
+
+void
+remove_sleep_thread(int64_t ticks)
+{
+  struct list_elem * check_elem;
+  struct thread * check_thread;
+  check_elem = list_begin(&sleep_list);
+  while (list_end(&sleep_list) != check_elem)
+  {
+    check_thread = list_entry(check_elem, struct thread, elem);
+    if (check_thread->when_wakeup_time <= ticks)
+    {
+      check_elem = list_remove(&check_thread->elem);
+      thread_unblock(check_thread);
+    }
+    else
+    {
+      check_elem = list_next(check_elem);
+    }
+  }
+}
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
