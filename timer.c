@@ -90,10 +90,21 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
+  enum intr_level save_intr_level;
+  save_intr_level = intr_disable();
 
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  struct thread * present_thread;
+  present_thread = thread_current();
+
+  present_thread->when_wakeup_time = start + ticks;
+  insert_sleep_thread(present_thread);
+
+  thread_block();
+  intr_set_level(save_intr_level);
+
+ // ASSERT (intr_get_level () == INTR_ON);
+ // while (timer_elapsed (start) < ticks) 
+ //   thread_yield ();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -171,6 +182,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  remove_sleep_thread(ticks);
   thread_tick ();
 }
 
