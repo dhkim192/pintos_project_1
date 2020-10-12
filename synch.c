@@ -215,31 +215,34 @@ lock_acquire (struct lock *lock)
 
     while (limit_check < PRI_DONATION_MAX && temp_lock)
     {
-      if (list_empty(&lock->holder->own_lock_list) == false && thread_current()->priority > temp_lock->save_limit_priority)
+      if (thread_current()->priority > temp_lock->save_limit_priority)
       {
-        temp_lock->save_limit_priority = thread_current()->priority;
-        list_sort(&lock->holder->own_lock_list, check_priority, NULL);
-        int temp_priority = list_entry(list_front(&lock->holder->own_lock_list), struct lock, elem)->save_limit_priority;
-        if (temp_priority < lock->holder->pre_donation_priority)
+	temp_lock->save_limit_priority = thread_current()->priority;
+        if (list_empty(&lock->holder->own_lock_list) == false)
         {
-	  lock->holder->priority = lock->holder->pre_donation_priority;
+          list_sort(&lock->holder->own_lock_list, check_priority, NULL);
+          int temp_priority = list_entry(list_front(&lock->holder->own_lock_list), struct lock, elem)->save_limit_priority;
+          if (temp_priority < lock->holder->pre_donation_priority)
+          {
+	    lock->holder->priority = lock->holder->pre_donation_priority;
+          }
+          else
+          {
+	    lock->holder->priority = temp_priority;
+          }
+          ready_list_sort_synch();
         }
-        else
-        {
-	  lock->holder->priority = temp_priority;
-        }
-        ready_list_sort_synch();
-        temp_lock = temp_lock->holder->need_priority_donation_lock;
       }
+      temp_lock = temp_lock->holder->need_priority_donation_lock;
       limit_check++;
     }
 
     intr_set_level(old_level);
   }
 
-  sema_down (&lock->semaphore);
-
+  sema_down(&lock->semaphore);
   lock->save_limit_priority = thread_current()->priority;
+  thread_current()->need_priority_donation_lock = NULL;
   list_push_back(&thread_current()->own_lock_list, &lock->elem);
   list_sort(&thread_current()->own_lock_list,check_priority,NULL);
   if (lock->save_limit_priority > thread_current()->priority)
@@ -248,7 +251,6 @@ lock_acquire (struct lock *lock)
     thread_yield_priority();
   }
   lock->holder = thread_current ();
-  lock->holder->need_priority_donation_lock = NULL;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
