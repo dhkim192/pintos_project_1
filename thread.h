@@ -23,6 +23,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define PRI_DONATION_MAX 9
 
 /* A kernel thread or user process.
 
@@ -92,6 +93,10 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    int64_t when_wakeup_time;
+    int pre_donation_priority;
+    struct list own_lock_list;
+    struct lock * need_priority_donation_lock;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -100,7 +105,6 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-    int64_t when_wakeup_time;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -122,6 +126,9 @@ void thread_unblock (struct thread *);
 
 void insert_sleep_thread(struct thread * present_thread);
 void remove_sleep_thread(int64_t ticks);
+bool check_priority(struct list_elem * check_elem1, struct list_elem * check_elem2);
+void ready_list_sort_synch(void);
+void thread_yield_priority(void);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);

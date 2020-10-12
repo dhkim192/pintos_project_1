@@ -293,6 +293,25 @@ check_priority(struct list_elem * check_elem1, struct list_elem * check_elem2)
   }
 }
 
+void
+ready_list_sort_synch(void)
+{
+  list_sort(&ready_list,check_priority,NULL);
+}
+
+void
+thread_yield_priority(void)
+{
+  if (list_empty(&ready_list) == false)
+  {
+    int temp_priority = list_entry(list_front(&ready_list),struct thread,elem)->priority;
+    if (temp_priority > thread_current()->priority)
+    {
+      thread_yield();
+    }
+  }
+}
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
@@ -389,8 +408,15 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  thread_yield();
+  if (list_empty(&thread_current()->own_lock_list) == true)
+  {
+    if (thread_current()->priority > new_priority)
+    {
+      thread_current()->priority = new_priority;
+      thread_yield_priority();
+    }
+  }
+  thread_current()->pre_donation_priority = new_priority;
 }
 
 /* Returns the current thread's priority. */
@@ -517,6 +543,9 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->pre_donation_priority = priority;
+  list_init(&t->own_lock_list);
+  t->need_priority_donation_lock = NULL;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
