@@ -183,7 +183,6 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
-  lock->save_limit_priority = 0;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -202,55 +201,32 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  int limit_check = 0;
-  struct lock * temp_lock;
-
   if (lock->holder != NULL)
   {
-    enum intr_level old_level;
-    old_level = intr_disable();
-
-    temp_lock = lock;
+    int limit_check = 0;
+    struct thread * temp_thread = thread_current();
     thread_current()->need_priority_donation_lock = lock;
-
-    while (limit_check < PRI_DONATION_MAX && temp_lock)
+    list_push_back(&lock->holder->own_lock_list,&thread_current()->own_lock_list_elem);
+    list_sort(&lock->holder->own_lock_list,check_priority,NULL);
+    while (limit_check < PRI_DONATION_MAX && temp_thread->need_priority_donation_lock)
     {
-      if (thread_current()->priority > temp_lock->save_limit_priority)
+      struct thread * saved_thread = temp_thread->need_priority_donation_lock->holder;
+      if (saved_thread && saved_thread->priority < temp_thread->priority)
       {
-	temp_lock->save_limit_priority = thread_current()->priority;
-        if (list_empty(&lock->holder->own_lock_list) == false)
-        {
-          list_sort(&lock->holder->own_lock_list, check_priority, NULL);
-          int temp_priority = list_entry(list_front(&lock->holder->own_lock_list), struct lock, elem)->save_limit_priority;
-          if (temp_priority < lock->holder->pre_donation_priority)
-          {
-	    lock->holder->priority = lock->holder->pre_donation_priority;
-          }
-          else
-          {
-	    lock->holder->priority = temp_priority;
-          }
-          ready_list_sort_synch();
-        }
+        saved_thread->priority = temp_thread->priority;
+	temp_thread = saved_thread;
+	limit_check++;
       }
-      temp_lock = temp_lock->holder->need_priority_donation_lock;
-      limit_check++;
+      else
+      {
+        break;
+      }
     }
-
-    intr_set_level(old_level);
   }
 
   sema_down(&lock->semaphore);
-  lock->save_limit_priority = thread_current()->priority;
   thread_current()->need_priority_donation_lock = NULL;
-  list_push_back(&thread_current()->own_lock_list, &lock->elem);
-  list_sort(&thread_current()->own_lock_list,check_priority,NULL);
-  if (lock->save_limit_priority > thread_current()->priority)
-  {
-    thread_current()->priority = lock->save_limit_priority;
-    thread_yield_priority();
-  }
-  lock->holder = thread_current ();
+  lock->holder = thread_current();
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -287,31 +263,38 @@ lock_release (struct lock *lock)
   enum intr_level old_level;
   old_level = intr_disable();
 
-  list_remove(&lock->elem);
-  //if (lock->holder->priority != lock->holder->pre_donation_priority)
-  //{
-  //  lock->holder->priority = lock->holder->pre_donation_priority;
-  //}
-  
-  if (list_empty(&thread_current()->own_lock_list) == false)
+  if (!list_empty(&thread_current()->own_lock_list))
   {
-    int temp_priority = list_entry(list_front(&thread_current()->own_lock_list),struct lock,elem)->save_limit_priority;
-    if (temp_priority > thread_current()->pre_donation_priority)
+    struct list_elem * temp_elem = list_front(&thread_current()->own_lock_list);
+    for (struct list_elem * temp_elem = list_front(&thread_current()->own_lock_list);temp_elem != list_end(&thread_current()->own_lock_list);temp_elem = list_next(temp_elem))
     {
-      thread_current()->priority = temp_priority;
+      struct thread * temp_thread = list_entry(temp_elem,struct thread,own_lock_list_elem);
+      if (lock == temp_thread->need_priority_donation_lock)
+      {
+        list_remove(temp_elem);
+      }
+    }
+    if (!list_empty(&thread_current()->own_lock_list))
+    {
+      int temp_priority = list_entry(list_front(&thread_current()->own_lock_list),struct thread,own_lock_list_elem)->priority;
+      if (temp_priority > thread_current()->pre_donation_priority)
+      {
+        thread_current()->priority = temp_priority;
+      }
+      else
+      {
+        thread_current()->priority = thread_current()->pre_donation_priority;
+      }
     }
     else
     {
       thread_current()->priority = thread_current()->pre_donation_priority;
     }
   }
-  else
-  {
-    lock->holder->priority = lock->holder->pre_donation_priority;
-  }
 
   lock->holder = NULL;
-  sema_up (&lock->semaphore);
+  sema_up(&lock->semaphore);
+
   intr_set_level(old_level);
 }
     

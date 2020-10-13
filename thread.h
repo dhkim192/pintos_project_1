@@ -97,6 +97,7 @@ struct thread
     int pre_donation_priority;
     struct list own_lock_list;
     struct lock * need_priority_donation_lock;
+    struct list_elem own_lock_list_elem;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -105,6 +106,9 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    int nice;
+    int recent_cpu;
   };
 
 /* If false (default), use round-robin scheduler.

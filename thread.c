@@ -294,12 +294,6 @@ check_priority(struct list_elem * check_elem1, struct list_elem * check_elem2)
 }
 
 void
-ready_list_sort_synch(void)
-{
-  list_sort(&ready_list,check_priority,NULL);
-}
-
-void
 thread_yield_priority(void)
 {
   if (list_empty(&ready_list) == false)
@@ -408,15 +402,26 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  if (list_empty(&thread_current()->own_lock_list) == true)
-  {
-    if (thread_current()->priority > new_priority)
-    {
-      thread_current()->priority = new_priority;
-      thread_yield_priority();
-    }
-  }
+  int temp_priority = thread_current()->priority;
   thread_current()->pre_donation_priority = new_priority;
+  thread_current()->priority = new_priority;
+
+  if (temp_priority > new_priority)
+  {
+    if (!list_empty(&thread_current()->own_lock_list))
+    {
+      struct thread * temp_thread = list_entry(list_front(&thread_current()->own_lock_list),struct thread,own_lock_list_elem);
+      if (temp_thread->pre_donation_priority > new_priority)
+      {
+        thread_current()->priority = temp_thread->priority;
+      }
+      else
+      {
+        thread_current()->priority = thread_current()->pre_donation_priority;
+      }
+    }
+    thread_yield_priority();
+  }
 }
 
 /* Returns the current thread's priority. */
