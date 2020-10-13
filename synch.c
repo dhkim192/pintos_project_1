@@ -201,25 +201,28 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  if (lock->holder != NULL)
+  if (!thread_mlfqs)
   {
-    int limit_check = 0;
-    struct thread * temp_thread = thread_current();
-    thread_current()->need_priority_donation_lock = lock;
-    list_push_back(&lock->holder->own_lock_list,&thread_current()->own_lock_list_elem);
-    list_sort(&lock->holder->own_lock_list,check_priority,NULL);
-    while (limit_check < PRI_DONATION_MAX && temp_thread->need_priority_donation_lock)
+    if (lock->holder != NULL)
     {
-      struct thread * saved_thread = temp_thread->need_priority_donation_lock->holder;
-      if (saved_thread && saved_thread->priority < temp_thread->priority)
+      int limit_check = 0;
+      struct thread * temp_thread = thread_current();
+      thread_current()->need_priority_donation_lock = lock;
+      list_push_back(&lock->holder->own_lock_list,&thread_current()->own_lock_list_elem);
+      list_sort(&lock->holder->own_lock_list,check_priority,NULL);
+      while (limit_check < PRI_DONATION_MAX && temp_thread->need_priority_donation_lock)
       {
-        saved_thread->priority = temp_thread->priority;
-	temp_thread = saved_thread;
-	limit_check++;
-      }
-      else
-      {
-        break;
+        struct thread * saved_thread = temp_thread->need_priority_donation_lock->holder;
+        if (saved_thread && saved_thread->priority < temp_thread->priority)
+        {
+          saved_thread->priority = temp_thread->priority;
+	  temp_thread = saved_thread;
+	  limit_check++;
+        }
+        else
+        {
+          break;
+        }
       }
     }
   }
@@ -263,32 +266,35 @@ lock_release (struct lock *lock)
   enum intr_level old_level;
   old_level = intr_disable();
 
-  if (!list_empty(&thread_current()->own_lock_list))
+  if (!thread_mlfqs)
   {
-    struct list_elem * temp_elem = list_front(&thread_current()->own_lock_list);
-    for (struct list_elem * temp_elem = list_front(&thread_current()->own_lock_list);temp_elem != list_end(&thread_current()->own_lock_list);temp_elem = list_next(temp_elem))
-    {
-      struct thread * temp_thread = list_entry(temp_elem,struct thread,own_lock_list_elem);
-      if (lock == temp_thread->need_priority_donation_lock)
-      {
-        list_remove(temp_elem);
-      }
-    }
     if (!list_empty(&thread_current()->own_lock_list))
     {
-      int temp_priority = list_entry(list_front(&thread_current()->own_lock_list),struct thread,own_lock_list_elem)->priority;
-      if (temp_priority > thread_current()->pre_donation_priority)
+      struct list_elem * temp_elem = list_front(&thread_current()->own_lock_list);
+      for (struct list_elem * temp_elem = list_front(&thread_current()->own_lock_list);temp_elem != list_end(&thread_current()->own_lock_list);temp_elem = list_next(temp_elem))
       {
-        thread_current()->priority = temp_priority;
+        struct thread * temp_thread = list_entry(temp_elem,struct thread,own_lock_list_elem);
+        if (lock == temp_thread->need_priority_donation_lock)
+        {
+          list_remove(temp_elem);
+        }
+      }
+      if (!list_empty(&thread_current()->own_lock_list))
+      {
+        int temp_priority = list_entry(list_front(&thread_current()->own_lock_list),struct thread,own_lock_list_elem)->priority;
+        if (temp_priority > thread_current()->pre_donation_priority)
+        {
+          thread_current()->priority = temp_priority;
+        }
+        else
+        {
+          thread_current()->priority = thread_current()->pre_donation_priority;
+        }
       }
       else
       {
         thread_current()->priority = thread_current()->pre_donation_priority;
       }
-    }
-    else
-    {
-      thread_current()->priority = thread_current()->pre_donation_priority;
     }
   }
 
