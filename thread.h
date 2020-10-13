@@ -23,6 +23,11 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define PRI_DONATION_MAX 9
+
+#define NICE 0
+#define RECENT_CPU 0
+#define LOAD_AVG 0
 
 /* A kernel thread or user process.
 
@@ -92,6 +97,11 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    int64_t when_wakeup_time;
+    int pre_donation_priority;
+    struct list own_lock_list;
+    struct lock * need_priority_donation_lock;
+    struct list_elem own_lock_list_elem;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -100,6 +110,9 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    int nice;
+    int recent_cpu;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -118,6 +131,12 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+
+void insert_sleep_thread(struct thread * present_thread);
+void remove_sleep_thread(int64_t ticks);
+bool check_priority(struct list_elem * check_elem1, struct list_elem * check_elem2);
+void ready_list_sort_synch(void);
+void thread_yield_priority(void);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -138,4 +157,10 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+void timer_interrupt_update(int64_t ticks, int64_t timer_freq);
+void recent_cpu_increase(void);
+void per_sec_update(void);
+void per_4ticks_update(void);
+void recent_cpu_update(struct thread * temp_thread);
+void priority_update(struct thread * temp_thread);
 #endif /* threads/thread.h */
