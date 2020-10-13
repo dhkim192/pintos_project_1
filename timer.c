@@ -184,6 +184,19 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   remove_sleep_thread(ticks);
   thread_tick ();
+
+  if (thread_mlfqs)
+  {
+    recent_cpu_increase();
+    if (ticks % TIMER_FREQ == 0)
+    {
+      per_sec_update();
+    }
+    if (ticks % 4 == 0)
+    {
+      per_4ticks_update();
+    }
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
