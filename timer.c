@@ -192,7 +192,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
     {
       per_sec_update();
     }
-    if (ticks % 4 == 0)
+    else if (ticks % 4 == 0)
     {
       per_4ticks_update();
     }
