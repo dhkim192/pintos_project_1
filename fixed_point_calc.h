@@ -1,7 +1,7 @@
 #ifndef FIXED_POINT_CALC_H
 #define FIXED_POINT_CALC_H
 
-#define FP 1 << 14
+#define FP (1 << 14)
 
 int fp_conv_int(int n)
 {

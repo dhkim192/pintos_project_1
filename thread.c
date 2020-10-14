@@ -439,50 +439,30 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  enum intr_level old_level;
-  old_level = intr_disable();
-
   thread_current()->nice = nice;
   priority_update(thread_current());
-  list_sort(&ready_list,check_priority,NULL);
-
-  intr_set_level (old_level);
+  thread_yield_priority();
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  enum intr_level old_level;
-  old_level = intr_disable();
-
   return thread_current()->nice;
-
-  intr_set_level(old_level);
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  enum intr_level old_level;
-  old_level = intr_disable();
-
-  return fp_conv_fp_round_near(fp_mul_int(load_avg,100));
-  
-  intr_set_level(old_level);
+  return fp_conv_fp_round_near(fp_mul_int(load_avg,100)); 
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  enum intr_level old_level;
-  old_level = intr_disable();
-
   return fp_conv_fp_round_near(fp_mul_int(thread_current()->recent_cpu,100));
-
-  intr_set_level(old_level);
 }
 
 void
@@ -497,28 +477,24 @@ recent_cpu_increase(void)
 void
 per_sec_update(void)
 {
-  enum intr_level old_level;
-  old_level = intr_disable();
   int ready_threads = list_size(&ready_list);
   if (thread_current() != idle_thread)
   {
     ready_threads++;
   }
-  load_avg = fp_add_fp(fp_mul_fp(load_avg,(fp_conv_int(59)/60)),fp_mul_fp(fp_conv_int(ready_threads),(fp_conv_int(1)/60)));
+  load_avg = fp_mul_fp(load_avg,(fp_conv_int(59)/60)) + ready_threads * fp_conv_int(1) / 60;
+  
+  enum intr_level old_level;
+  old_level = intr_disable();
   thread_foreach(recent_cpu_update,NULL);
   thread_foreach(priority_update,NULL);
-  list_sort(&ready_list,check_priority,NULL);
   intr_set_level(old_level);
 }
 
 void
 per_4ticks_update(void)
 {
-  enum intr_level old_level;
-  old_level = intr_disable();
-  thread_foreach(priority_update,NULL);
-  list_sort(&ready_list,check_priority,NULL);
-  intr_set_level(old_level);
+  priority_update(thread_current());
 }
 
 void
@@ -526,7 +502,7 @@ recent_cpu_update(struct thread * temp_thread)
 {
   if (temp_thread != idle_thread)
   {
-    temp_thread->recent_cpu = fp_add_fp(fp_mul_fp(fp_div_fp(fp_mul_int(load_avg,2),fp_add_int(fp_mul_int(load_avg,2),1)),temp_thread->recent_cpu),temp_thread->nice);
+    temp_thread->recent_cpu = fp_add_int(fp_mul_fp(fp_div_fp(load_avg * 2,fp_add_int(load_avg * 2,1)),temp_thread->recent_cpu),temp_thread->nice);
   }
 }
 
@@ -535,7 +511,7 @@ priority_update(struct thread * temp_thread)
 {
   if (temp_thread != idle_thread)
   {
-    temp_thread->priority = fp_sub_fp(fp_conv_int(PRI_MAX),fp_sub_fp(fp_div_int(temp_thread->recent_cpu,4),fp_mul_int(temp_thread->nice,2)));
+    temp_thread->priority = PRI_MAX - fp_conv_fp_round_near(temp_thread->recent_cpu / 4) - temp_thread->nice * 2;
     if (temp_thread->priority > PRI_MAX)
     {
       temp_thread->priority = PRI_MAX;
